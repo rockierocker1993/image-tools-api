@@ -1,9 +1,9 @@
 package id.rockierocker.imagetools.constant;
 
-import id.rockierocker.imagetools.preprocess.AdjustContrast;
-import id.rockierocker.imagetools.preprocess.KMeansQuantization;
-import id.rockierocker.imagetools.preprocess.RemoveOutline;
-import id.rockierocker.imagetools.preprocess.Sharpen;
+import id.rockierocker.imagetools.service.preprocess.AdjustContrast;
+import id.rockierocker.imagetools.service.preprocess.KMeansQuantization;
+import id.rockierocker.imagetools.service.preprocess.RemoveOutline;
+import id.rockierocker.imagetools.service.preprocess.Sharpen;
 
 public enum PreprocessEnum {
     K_MEANS_QUANTIZATION(KMeansQuantization.class),

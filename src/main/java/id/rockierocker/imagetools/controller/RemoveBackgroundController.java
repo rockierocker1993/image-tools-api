@@ -1,6 +1,6 @@
 package id.rockierocker.imagetools.controller;
 
-import id.rockierocker.imagetools.dto.removebackground.RemoveDto;
+import id.rockierocker.imagetools.dto.RemoveBackgroundRequestDto;
 import id.rockierocker.imagetools.service.RemoveBackgroundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -16,7 +16,8 @@ public class RemoveBackgroundController {
     private final RemoveBackgroundService removeBackgroundService;
 
     @PostMapping(path = "/remove", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> remove(@RequestParam("file") MultipartFile file, @ModelAttribute RemoveDto removeDto)  {
+    public ResponseEntity<?> remove(@RequestParam("file") MultipartFile file, @ModelAttribute RemoveBackgroundRequestDto removeDto)  {
         return removeBackgroundService.removeBackground(file, removeDto);
     }
+
 }

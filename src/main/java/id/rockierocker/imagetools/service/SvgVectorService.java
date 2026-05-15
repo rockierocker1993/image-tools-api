@@ -1,23 +1,18 @@
 package id.rockierocker.imagetools.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import id.rockierocker.imagetools.constant.*;
-import id.rockierocker.imagetools.dto.svgvector.TraceDto;
+import id.rockierocker.imagetools.dto.SvgVectorRequestDto;
 import id.rockierocker.imagetools.exception.BadRequestException;
 import id.rockierocker.imagetools.exception.InternalServerErrorException;
-import id.rockierocker.imagetools.model.VtraceConfig;
-import id.rockierocker.imagetools.preprocess.Preprocess;
-import id.rockierocker.imagetools.constant.PreprocessEnum;
-import id.rockierocker.imagetools.preprocess.model.PreprocessConfig;
-import id.rockierocker.imagetools.repository.PreprocessConfigRepository;
+import id.rockierocker.imagetools.entity.VtraceConfig;
 import id.rockierocker.imagetools.repository.VtraceConfigRepository;
 import id.rockierocker.imagetools.util.CommonUtil;
 import id.rockierocker.imagetools.util.ImageUtil;
-import id.rockierocker.imagetools.vectorize.VTracerVectorizer;
-import id.rockierocker.imagetools.vectorize.Vectorizer;
-import id.rockierocker.imagetools.vectorize.constant.VTracerColorMode;
-import id.rockierocker.imagetools.vectorize.constant.VTracerCurveFittingMode;
-import id.rockierocker.imagetools.vectorize.constant.VTracerHierarchical;
+import id.rockierocker.imagetools.service.vectorize.VTracerVectorizer;
+import id.rockierocker.imagetools.service.vectorize.Vectorizer;
+import id.rockierocker.imagetools.service.vectorize.constant.VTracerColorMode;
+import id.rockierocker.imagetools.service.vectorize.constant.VTracerCurveFittingMode;
+import id.rockierocker.imagetools.service.vectorize.constant.VTracerHierarchical;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,7 +49,7 @@ public class SvgVectorService {
      *  see the doc for more info: https://github.com/visioncortex/vtracer?tab=readme-ov-file
      * */
     @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<byte[]> trace(MultipartFile file, TraceDto traceDto) {
+    public ResponseEntity<byte[]> trace(MultipartFile file, SvgVectorRequestDto traceDto) {
         log.info("Starting SVG conversion using {}", vectorizerVtrace.getName());
         try {
             byte[] svgBytes = doProcessingVTrace(file, traceDto);
@@ -78,7 +73,7 @@ public class SvgVectorService {
 
     }
 
-    public byte[] doProcessingVTrace(MultipartFile file, TraceDto traceDto) throws IOException {
+    public byte[] doProcessingVTrace(MultipartFile file, SvgVectorRequestDto traceDto) throws IOException {
         log.info("Starting processing for VTrace vectorization.");
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename() == null ? "" : file.getOriginalFilename());
         String ext = CommonUtil.getExtensionLower(originalFilename);
@@ -157,10 +152,6 @@ public class SvgVectorService {
         }
         return additionalCommandMap;
     }
-
-
-
-
 
     private byte[] doVectorization(Vectorizer vectorizer, File inputFile, List<String> additionalCommand) {
         log.info("Performing vectorization using " + vectorizer.getName());

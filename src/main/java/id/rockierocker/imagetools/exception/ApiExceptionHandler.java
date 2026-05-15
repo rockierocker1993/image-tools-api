@@ -21,8 +21,16 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(ResponseUtil.buildSuccessResponse(responseCode, null));
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<BaseResponse> handleUnathorizedException(
+            UnauthorizedException ex,
+            HttpServletRequest request) {
+        ResponseCode responseCode = ex.getResponseCode();
+        return new ResponseEntity<>(ResponseUtil.buildSuccessResponse(responseCode, null), HttpStatus.UNAUTHORIZED);
+    }
+
     @ExceptionHandler(InternalServerErrorException.class)
-    public ResponseEntity<BaseResponse> handleGeneralException(
+    public ResponseEntity<BaseResponse> handleInternalException(
             InternalServerErrorException ex,
             HttpServletRequest request) {
 

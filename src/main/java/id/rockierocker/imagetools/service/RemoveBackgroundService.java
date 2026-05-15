@@ -1,7 +1,7 @@
 package id.rockierocker.imagetools.service;
 
-import id.rockierocker.imagetools.constant.ResponseCode;
-import id.rockierocker.imagetools.dto.removebackground.RemoveDto;
+import id.rockierocker.imagetools.constant.*;
+import id.rockierocker.imagetools.dto.*;
 import id.rockierocker.imagetools.exception.BadRequestException;
 import id.rockierocker.imagetools.exception.InternalServerErrorException;
 import id.rockierocker.imagetools.util.CommonUtil;
@@ -25,7 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.*;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -36,13 +36,17 @@ public class RemoveBackgroundService {
     private final PreprocessService preprocessService;
 
     private final RestTemplate restTemplate;
+
+
     @Value("${remove-bg.url}")
     private String url;
     @Value("${image.allowed.extensions:png,jpg,jpeg}")
     private List<String> allowedExtensions = List.of("png", "jpg", "jpeg");
 
 
-    public ResponseEntity<byte[]> removeBackground(MultipartFile multipartFile, RemoveDto removeDto) {
+
+    @Deprecated(forRemoval = true, since = "2026-05-04")
+    public ResponseEntity<byte[]> removeBackground(MultipartFile multipartFile, RemoveBackgroundRequestDto removeDto) {
         try {
             log.info("Removing background for file: {}", multipartFile.getOriginalFilename());
             String originalFilename = StringUtils.cleanPath(multipartFile.getOriginalFilename() == null ? "" : multipartFile.getOriginalFilename());
@@ -66,7 +70,7 @@ public class RemoveBackgroundService {
                 inputFile = pngPath.toFile();
                 log.info("Input image converted to PNG successfully.");
             }
-            if(StringUtils.hasText(removeDto.getPreprocessStepCode()))
+            if (StringUtils.hasText(removeDto.getPreprocessStepCode()))
                 inputFile = preprocessService.preprocess(removeDto.getPreprocessStepCode(), inputFile);
 
             HttpHeaders headers = new HttpHeaders();
@@ -80,7 +84,7 @@ public class RemoveBackgroundService {
             log.info("Sending request to Remove Background API at: {}", url);
             Resource response = restTemplate.postForObject(url, requestEntity, Resource.class);
             log.info("Received response from Remove Background API, file size: {} bytes, filename {}", response.contentLength(), response.getFilename());
-            byte[]rembgBytes = response.getContentAsByteArray();
+            byte[] rembgBytes = response.getContentAsByteArray();
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .header(
@@ -89,9 +93,11 @@ public class RemoveBackgroundService {
                     )
                     .contentLength(rembgBytes.length)
                     .body(rembgBytes);
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("Error while removing background: ", e);
             throw new InternalServerErrorException(ResponseCode.UKNOWN_ERROR);
         }
     }
+
+
 }

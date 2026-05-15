@@ -1,6 +1,6 @@
 package id.rockierocker.imagetools.repository;
 
-import id.rockierocker.imagetools.model.PreprocessConfig;
+import id.rockierocker.imagetools.entity.PreprocessConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

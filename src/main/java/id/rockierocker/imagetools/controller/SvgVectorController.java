@@ -1,6 +1,6 @@
 package id.rockierocker.imagetools.controller;
 
-import id.rockierocker.imagetools.dto.svgvector.TraceDto;
+import id.rockierocker.imagetools.dto.SvgVectorRequestDto;
 import id.rockierocker.imagetools.service.SvgVectorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -17,7 +17,7 @@ public class SvgVectorController {
     private final SvgVectorService svgVectorService;
 
     @PostMapping(path = "/trace", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> vtrace(@RequestParam("file") MultipartFile file, @ModelAttribute TraceDto traceDto)  {
+    public ResponseEntity<?> vtrace(@RequestParam("file") MultipartFile file, @ModelAttribute SvgVectorRequestDto traceDto)  {
         return svgVectorService.trace(file, traceDto);
     }
 

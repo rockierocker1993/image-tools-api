@@ -1,16 +1,16 @@
 package id.rockierocker.imagetools.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import id.rockierocker.imagetools.constant.PreprocessEnum;
 import id.rockierocker.imagetools.constant.ResponseCode;
 import id.rockierocker.imagetools.exception.InternalServerErrorException;
-import id.rockierocker.imagetools.preprocess.Preprocess;
-import id.rockierocker.imagetools.preprocess.model.PreprocessConfig;
+import id.rockierocker.imagetools.service.preprocess.Preprocess;
+import id.rockierocker.imagetools.service.preprocess.model.PreprocessConfig;
 import id.rockierocker.imagetools.repository.PreprocessConfigRepository;
 import id.rockierocker.imagetools.util.ImageUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.awt.image.BufferedImage;
 import java.io.File;

@@ -1,32 +1,30 @@
 package id.rockierocker.imagetools.config;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.introspect.VisibilityChecker;
+import tools.jackson.databind.json.JsonMapper;
 
 @Configuration
 public class JacksonConfig {
 
     @Bean
     public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-
-        // ✅ Allow empty bean
-        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-
-        // ✅ Ignore unknown JSON fields
-        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-
-        // ✅ Allow missing fields (default behavior, but explicit)
-        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
-
-        // Optional but recommended
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-        return mapper;
+        return JsonMapper.builder()
+                // ✅ Tidak throw error saat object tidak punya property yg bisa di-serialize
+                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
+                // ✅ Ignore unknown JSON fields saat deserialisasi
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                // ✅ Izinkan field private ter-serialize via Lombok @Data getter/setter
+                .changeDefaultVisibility(vc -> vc
+                        .withFieldVisibility(JsonAutoDetect.Visibility.ANY)
+                        .withGetterVisibility(JsonAutoDetect.Visibility.PUBLIC_ONLY)
+                        .withSetterVisibility(JsonAutoDetect.Visibility.PUBLIC_ONLY)
+                        .withIsGetterVisibility(JsonAutoDetect.Visibility.PUBLIC_ONLY))
+                .build();
     }
 }

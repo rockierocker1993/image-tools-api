@@ -1,6 +1,6 @@
 package id.rockierocker.imagetools.repository;
 
-import id.rockierocker.imagetools.model.VtraceConfig;
+import id.rockierocker.imagetools.entity.VtraceConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

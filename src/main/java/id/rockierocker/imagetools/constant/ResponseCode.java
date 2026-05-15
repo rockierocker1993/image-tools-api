@@ -174,6 +174,20 @@ public enum ResponseCode {
             "Error",
             "Error."
     ),
+    UNAUTHORIZED(
+            "RC401",
+            "Token tidak valid atau sudah expired.",
+            "Token is invalid or has expired.",
+            "Unauthorized",
+            "Unauthorized"
+    ),
+    IMAGE_NOT_FOUND(
+            "RC024",
+            "Token tidak valid atau sudah expired.",
+            "Token is invalid or has expired.",
+            "Unauthorized",
+            "Unauthorized"
+    ),
     ;
 
     private ResponseCode(String code, String defaultMessageId, String defaultMessageEn, String defaultTitleId, String defaultTitleEn) {
