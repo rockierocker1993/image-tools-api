@@ -100,11 +100,77 @@ public class ImageUtil {
     }
     
     public static BufferedImage toBufferedImage(File file, RuntimeException runtimeException) {
+        // 1) Coba pakai ImageIO dulu (cepat, no native).
         try {
-            return ImageIO.read(file);
+            BufferedImage img = ImageIO.read(file);
+            if (img != null) {
+                return img;
+            }
+            log.warn("ImageIO.read returned null for {}, fallback to OpenCV", file.getAbsolutePath());
         } catch (Exception e) {
+            log.warn("ImageIO.read failed for {} ({}), fallback to OpenCV",
+                    file.getAbsolutePath(), e.getMessage());
+        }
+
+        // 2) Fallback: decode via OpenCV (handle 16-bit PNG, CMYK, iCCP warning, dll).
+        try {
+            byte[] pngBytes = toPngBytesViaOpenCv(file);
+            BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(pngBytes));
+            if (img == null) {
+                throw new RuntimeException("Decoded PNG bytes still unreadable by ImageIO");
+            }
+            return img;
+        } catch (Exception e) {
+            log.error("Failed to read image (ImageIO + OpenCV) for {}: {}",
+                    file.getAbsolutePath(), e.getMessage(), e);
             throw runtimeException;
         }
+    }
+
+    /**
+     * Convert file gambar (JPG/JPEG/PNG/BMP/dll) ke byte array PNG menggunakan OpenCV.
+     * Lebih reliable dibanding ImageIO karena bisa handle CMYK JPEG, progressive JPEG, EXIF orientation, dll.
+     *
+     * @param inputFile file gambar sumber
+     * @return byte array dalam format PNG
+     */
+    public static byte[] toPngBytesViaOpenCv(File inputFile) {
+        loadOpenCv();
+        Mat mat = Imgcodecs.imread(inputFile.getAbsolutePath(), Imgcodecs.IMREAD_UNCHANGED);
+        if (mat.empty()) {
+            // Fallback: coba baca via ImageIO lalu re-write
+            try {
+                BufferedImage img = ImageIO.read(inputFile);
+                if (img == null) {
+                    throw new RuntimeException("Cannot decode image: " + inputFile.getAbsolutePath());
+                }
+                // Convert ke TYPE_INT_ARGB agar konsisten
+                BufferedImage normalized = new BufferedImage(
+                        img.getWidth(), img.getHeight(),
+                        img.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB
+                );
+                Graphics2D g = normalized.createGraphics();
+                g.drawImage(img, 0, 0, null);
+                g.dispose();
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(normalized, "png", baos);
+                return baos.toByteArray();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to read image file (both OpenCV and ImageIO): "
+                        + inputFile.getAbsolutePath(), e);
+            }
+        }
+
+        MatOfByte outputBuffer = new MatOfByte();
+        MatOfInt params = new MatOfInt(Imgcodecs.IMWRITE_PNG_COMPRESSION, 3);
+        boolean success = Imgcodecs.imencode(".png", mat, outputBuffer, params);
+        mat.release();
+
+        if (!success) {
+            throw new RuntimeException("Failed to encode image to PNG bytes: " + inputFile.getAbsolutePath());
+        }
+        log.info("Converted {} to PNG ({} bytes) via OpenCV", inputFile.getAbsolutePath(), outputBuffer.toArray().length);
+        return outputBuffer.toArray();
     }
 
     // -------------------------------------------------------------------------
@@ -217,7 +283,7 @@ public class ImageUtil {
      */
     private static volatile boolean opencvLoaded = false;
 
-    private static void loadOpenCv() {
+    public static void loadOpenCv() {
         if (!opencvLoaded) {
             synchronized (ImageUtil.class) {
                 if (!opencvLoaded) {

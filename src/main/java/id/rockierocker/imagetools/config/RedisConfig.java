@@ -20,6 +20,7 @@ public class RedisConfig {
     @Value("${redis.channel.job-rembg-response}")
     private String jobRembgChannel;
 
+
     // -------------------------------------------------------------------------
     // RedisTemplate
     // -------------------------------------------------------------------------

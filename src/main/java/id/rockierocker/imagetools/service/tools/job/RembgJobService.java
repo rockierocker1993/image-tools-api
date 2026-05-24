@@ -1,4 +1,4 @@
-package id.rockierocker.imagetools.service.job;
+package id.rockierocker.imagetools.service.tools.job;
 
 import id.rockierocker.imagetools.component.RedisPublisher;
 import id.rockierocker.imagetools.component.WebSocketPublisher;
@@ -6,11 +6,13 @@ import id.rockierocker.imagetools.component.s3.S3LocalMinio;
 import id.rockierocker.imagetools.component.s3.S3Runpod;
 import id.rockierocker.imagetools.constant.Module;
 import id.rockierocker.imagetools.dto.ConsumeJobData;
+import id.rockierocker.imagetools.dto.JobRequestDto;
 import id.rockierocker.imagetools.dto.RembgRequestDto;
 import id.rockierocker.imagetools.dto.RembgResponseDto;
 import id.rockierocker.imagetools.repository.ImageRepository;
 import id.rockierocker.imagetools.repository.UserActivityRepository;
 import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
+import id.rockierocker.imagetools.service.PreprocessService;
 import id.rockierocker.imagetools.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -31,9 +33,11 @@ public class RembgJobService extends AbstractJob<RembgRequestDto, RembgResponseD
     private String minioResultRembgPath;
     @Value("${remove-bg.model:birefnet-general}")
     private String rembgModel;
+    @Value("${remove-bg.preprocess-config-code:P_REMBG001}")
+    private String preprocessCode;
 
-    public RembgJobService(S3Runpod awsS3Runpod, S3LocalMinio awsS3LocalMinio, UserService userService, OutputDirectoryManagerService outputDirectoryManagerService, RedisPublisher redisPublisher, WebSocketPublisher webSocketPublisher, UserActivityRepository userActivityRepository, ImageRepository imageRepository, RedisTemplate<String, String> redisTemplate) {
-        super(awsS3Runpod, awsS3LocalMinio, userService, outputDirectoryManagerService, redisPublisher, webSocketPublisher, userActivityRepository, imageRepository, redisTemplate);
+    public RembgJobService(S3Runpod awsS3Runpod, S3LocalMinio awsS3LocalMinio, UserService userService, OutputDirectoryManagerService outputDirectoryManagerService, PreprocessService preprocessService, RedisPublisher redisPublisher, WebSocketPublisher webSocketPublisher, UserActivityRepository userActivityRepository, ImageRepository imageRepository, RedisTemplate<String, String> redisTemplate) {
+        super(awsS3Runpod, awsS3LocalMinio, userService, outputDirectoryManagerService, preprocessService, redisPublisher, webSocketPublisher, userActivityRepository, imageRepository, redisTemplate);
     }
 
     @Override
@@ -57,7 +61,7 @@ public class RembgJobService extends AbstractJob<RembgRequestDto, RembgResponseD
     }
 
     @Override
-    protected RembgRequestDto buildConsumerRequestData(String image) {
+    protected RembgRequestDto buildConsumerRequestData(String image, JobRequestDto jobRequestDto) {
         return RembgRequestDto.builder()
                 .webhookEnabled(true)
                 .model(rembgModel)
@@ -80,5 +84,10 @@ public class RembgJobService extends AbstractJob<RembgRequestDto, RembgResponseD
     @Override
     protected Module getModule() {
         return Module.REMBG;
+    }
+
+    @Override
+    protected String getPreprocessCode() {
+        return preprocessCode;
     }
 }

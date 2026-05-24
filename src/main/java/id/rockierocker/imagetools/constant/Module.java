@@ -3,6 +3,7 @@ package id.rockierocker.imagetools.constant;
 public enum Module {
     REMBG("REMBG"),
     UPSCALE("UPSCALE"),
+    VECTOR("VECTOR"),
     ;
 
     public static Module findByName(String name) {

@@ -1,10 +1,9 @@
 package id.rockierocker.imagetools.entity;
 
+import id.rockierocker.imagetools.entity.converter.JsonListStringConverter;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLRestriction;
-import org.hibernate.type.SqlTypes;
 
 import java.util.List;
 
@@ -25,24 +24,11 @@ public class PreprocessConfig extends BaseEntity{
     @Column(name = "config_code", length = 50)
     private String configCode;
 
-    @Column(name = "process", length = 20)
-    private String process;
-
-    @JdbcTypeCode(SqlTypes.JSON)
+    @Convert(converter = JsonListStringConverter.class)
     @Column(name = "steps", columnDefinition = "jsonb")
     private List<String> steps;
 
-    @Column(name = "k_colors")
-    private Integer kColors;
-
-    @Column(name = "contrast")
-    private Float contrast;
-
-    @Column(name = "iterations")
-    private Integer iterations;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "sharpen_kernel", columnDefinition = "jsonb")
-    private List<List<Float>> sharpenKernel;
+    @Column(name = "config", columnDefinition = "TEXT")
+    private String config;
 
 }

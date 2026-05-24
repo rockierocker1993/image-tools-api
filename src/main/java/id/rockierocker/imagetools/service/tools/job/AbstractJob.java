@@ -1,4 +1,4 @@
-package id.rockierocker.imagetools.service.job;
+package id.rockierocker.imagetools.service.tools.job;
 
 import id.rockierocker.imagetools.component.RedisPublisher;
 import id.rockierocker.imagetools.component.WebSocketPublisher;
@@ -10,9 +10,11 @@ import id.rockierocker.imagetools.dto.*;
 import id.rockierocker.imagetools.dto.websocket.JobNotifyDto;
 import id.rockierocker.imagetools.entity.Image;
 import id.rockierocker.imagetools.entity.UserActivity;
+import id.rockierocker.imagetools.exception.InternalServerErrorException;
 import id.rockierocker.imagetools.repository.ImageRepository;
 import id.rockierocker.imagetools.repository.UserActivityRepository;
 import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
+import id.rockierocker.imagetools.service.PreprocessService;
 import id.rockierocker.imagetools.service.UserService;
 import id.rockierocker.imagetools.util.CommonUtil;
 import id.rockierocker.imagetools.util.ImageUtil;
@@ -40,6 +42,7 @@ abstract class AbstractJob<T, R> {
 
     private final UserService userService;
     private final OutputDirectoryManagerService outputDirectoryManagerService;
+    private final PreprocessService preprocessService;
 
     private final RedisPublisher redisPublisher;
     private final WebSocketPublisher webSocketPublisher;
@@ -51,7 +54,6 @@ abstract class AbstractJob<T, R> {
 
     @Value("${runpod.base-volume}")
     protected String runpodBaseVolume;
-
 
     @Value("${enableWarmupEndpoint:false}")
     protected boolean enableWarmupEndpoint;
@@ -65,26 +67,35 @@ abstract class AbstractJob<T, R> {
 
     protected abstract String getPathResult();
 
-    protected abstract T buildConsumerRequestData(String image);
+    protected abstract T buildConsumerRequestData(String image, JobRequestDto jobRequestDto);
 
     protected abstract ConsumeJobData extractConsumeJobData(R consumerRequest);
 
     protected abstract Module getModule();
 
-    public ResponseEntity<BaseResponse<JobResponseDto>> crateJob(MultipartFile multipartFile, String token) {
+    protected abstract String getPreprocessCode();
+
+    public ResponseEntity<BaseResponse<JobResponseDto>> crateJob(MultipartFile multipartFile, JobRequestDto jobRequestDto) {
         log.info("Creating job {} for file: {}", getModule().name, multipartFile.getOriginalFilename());
 
         UserDetails userDetails = userService.getCurrentUser();
         String originalFilename = StringUtils.cleanPath(multipartFile.getOriginalFilename() == null ? "" : multipartFile.getOriginalFilename());
         String ext = CommonUtil.getExtensionLower(originalFilename);
         ValidatorUtil.validateAllowedImageExt(ext);
-        AwsS3UploadFileDto awsS3UploadFileDto = awsS3Runpod.uploadFile(multipartFile, getUploadTemp());
+        String contentType = multipartFile.getContentType();
+        byte[] inputBytes = CommonUtil.getBytes(multipartFile, new InternalServerErrorException(ResponseCode.FAILED_READ_FILE));
+        File inputFile = outputDirectoryManagerService.createTempFile("upload-" + originalFilename + "-", "." + ext, inputBytes, new InternalServerErrorException(ResponseCode.FAILED_CREATE_TEMP_FILE));
+        if(Objects.nonNull(getPreprocessCode())) {
+            log.info("Preprocessing file {} for job {} with code {}", originalFilename, getModule().name, getPreprocessCode());
+            inputFile = preprocessService.preprocess(getPreprocessCode(), inputFile);
+        }
+        AwsS3UploadFileDto awsS3UploadFileDto = awsS3Runpod.uploadFile(inputFile, contentType, getUploadTemp());
         String requestId = awsS3UploadFileDto.getUuid();
         String imageName = awsS3UploadFileDto.getImageName();
         redisPublisher.publish(getJobChannel(), requestId, ConsumerRequest.<T>builder()
                 .callRunpodSync(true)
                 .requestId(requestId)
-                .data(buildConsumerRequestData(imageName)).build(), 60L
+                .data(buildConsumerRequestData(imageName, jobRequestDto)).build(), 60L
         );
 
         userActivityRepository.save(UserActivity.builder()
@@ -110,6 +121,9 @@ abstract class AbstractJob<T, R> {
         Integer height = consumeJobData.getHeight();
         String webpUrl = "";
         boolean isSuccess;
+        UserActivity userActivity = userActivityRepository.findFirstByRequestId(requestId).orElse(null);
+        if(Objects.isNull(userActivity))
+            return;
         try {
             byte[] outputFile = awsS3Runpod.downloadFileAsBytes(outputVolume);
             File webpFile = outputDirectoryManagerService.createTempFile("converted-webp-" + requestId + "-", ".webp", outputFile);
@@ -118,11 +132,10 @@ abstract class AbstractJob<T, R> {
             String webpImageKey = awsS3LocalMinio.uploadFile(webpFileByte, webpImageName, "image/webp", getPathWebp());
             webpUrl = awsS3LocalMinio.generatePresignedUrl(webpImageKey);
             String resultImageName = "result-" + requestId + "-" + UUID.randomUUID().toString() + "." + ext;
-            String imageKey = awsS3LocalMinio.uploadFile(webpFileByte, resultImageName, "image/" + ext, getPathResult());
-
+            String imageKey = awsS3LocalMinio.uploadFile(outputFile, resultImageName, "image/" + ext, getPathResult());
             Image image = Image.builder()
                     .imageId(requestId)
-                    .userId(userService.getCurrentUser().getUserId())
+                    .userId(userActivity.getUserId())
                     .imageKey(imageKey)
                     .imageName(resultImageName)
                     .imageProvider(StorageProvider.MINIO.name())
@@ -139,15 +152,13 @@ abstract class AbstractJob<T, R> {
         } catch (Exception e) {
             isSuccess = false;
         }
-        UserActivity userActivity = userActivityRepository.findFirstByRequestId(requestId).orElse(null);
-        if (Objects.nonNull(userActivity)) {
-            webSocketPublisher.sendJobResult(userActivity.getUserId(), JobNotifyDto.builder()
-                    .requestId(requestId)
-                    .status(isSuccess)
-                    .webpUrl(webpUrl)
-                    .module(getModule())
-                    .build());
-        }
+        webSocketPublisher.sendJobResult(userActivity.getUserId(), JobNotifyDto.builder()
+                .requestId(requestId)
+                .status(isSuccess)
+                .webpUrl(webpUrl)
+                .module(getModule())
+                .build());
+
         awsS3Runpod.deleteFile(outputVolume);
 
         log.info("Image {} result saved successfully for jobId={}", getModule().name, requestId);
@@ -175,7 +186,7 @@ abstract class AbstractJob<T, R> {
         redisPublisher.publish(getJobChannel(), warmingUpKey, ConsumerRequest.<T>builder()
                 .callRunpodSync(true)
                 .requestId(warmingUpKey)
-                .data(buildConsumerRequestData(warmingUpKey)).build(), 30L
+                .data(buildConsumerRequestData(warmingUpKey, null)).build(), 30L
         );
         redisTemplate.opsForValue().set(String.format("%s:%s", getModule().name, warmingUpKey), "true", Duration.ofSeconds(60 * 10));
         return ResponseEntity.ok().body(ResponseUtil.buildSuccessResponse(ResponseCode.SUCCESS, "Warming up started"));

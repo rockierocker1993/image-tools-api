@@ -1,6 +1,7 @@
 package id.rockierocker.imagetools.component.s3;
 
 import id.rockierocker.imagetools.dto.AwsS3UploadFileDto;
+import id.rockierocker.imagetools.util.CommonUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.multipart.MultipartFile;
@@ -99,28 +100,43 @@ abstract class S3Abstract {
     }
 
     /**
-     * Upload file dari java.io.File ke S3.
+     * Upload file dari File ke S3.
      *
-     * @param file        file yang akan diupload
-     * @param contentType MIME type dari file
-     * @param folder      folder tujuan di S3 (opsional)
+     * @param file          file yang akan diupload
+     * @param contentType   MIME type dari file
+     * @param folder        folder tujuan di S3 (opsional)
      * @return S3 object key dari file yang diupload
      */
-    public String uploadFile(File file, String contentType, String folder) {
-        String extension = getExtension(file.getName());
-        String key = buildKey(folder, UUID.randomUUID().toString(), extension);
+    public AwsS3UploadFileDto uploadFile(File file, String contentType, String folder) {
+        String originalFilename = file.getName();
+        String extension = getExtension(originalFilename);
+        String uuid = UUID.randomUUID().toString();
+        String key = buildKey(folder, uuid, extension);
 
-        log.info("Uploading File to S3: bucket={}, key={}", getBucketName(), key);
+        log.info("Uploading file to S3: bucket={}, key={}", getBucketName(), key);
 
-        PutObjectRequest putRequest = PutObjectRequest.builder()
-                .bucket(getBucketName())
-                .key(key)
-                .contentType(contentType)
-                .build();
+        try (InputStream inputStream = java.nio.file.Files.newInputStream(file.toPath())) {
+            PutObjectRequest putRequest = PutObjectRequest.builder()
+                    .bucket(getBucketName())
+                    .key(key)
+                    .contentType(contentType)
+                    .contentLength(file.length())
+                    .build();
 
-        s3Client.putObject(putRequest, RequestBody.fromFile(file));
-        log.info("File uploaded successfully to S3: key={}", key);
-        return key;
+            s3Client.putObject(putRequest, RequestBody.fromInputStream(inputStream, file.length()));
+            log.info("File uploaded successfully to S3: key={}", key);
+            return AwsS3UploadFileDto.builder()
+                    .publicUrl(getPublicUrl(key))
+                    .fullPath(key)
+                    .uuid(uuid)
+                    .extension(extension)
+                    .folder(folder)
+                    .imageName(uuid + (extension.isEmpty() ? "" : "." + extension))
+                    .build();
+        } catch (IOException e) {
+            log.error("Failed to upload file to S3: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to upload file to S3: " + e.getMessage(), e);
+        }
     }
 
     /**

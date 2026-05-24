@@ -1,5 +1,7 @@
 package id.rockierocker.imagetools.service.vectorize;
 
+import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -9,8 +11,11 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+@RequiredArgsConstructor
 @Slf4j
 abstract class AbstractVectorizer {
+
+    private final OutputDirectoryManagerService outputDirectoryManagerService;
 
     protected void exec(ProcessBuilder pb, String name) throws Exception {
         log.info("Executing {} command: {}", name, String.join(" ", pb.command()));
@@ -32,7 +37,7 @@ abstract class AbstractVectorizer {
     }
 
     protected Path getOutputPath() throws IOException {
-        File tempFile = File.createTempFile("vector", ".svg");
+        File tempFile = outputDirectoryManagerService.createTempFile("vector", ".svg");
         return tempFile.toPath();
     }
 

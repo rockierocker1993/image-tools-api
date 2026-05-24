@@ -2,7 +2,7 @@ package id.rockierocker.imagetools.consumer;
 
 import id.rockierocker.imagetools.dto.ConsumerRequest;
 import id.rockierocker.imagetools.dto.RembgResponseDto;
-import id.rockierocker.imagetools.service.job.RembgJobService;
+import id.rockierocker.imagetools.service.tools.job.RembgJobService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;

@@ -1,5 +1,6 @@
 package id.rockierocker.imagetools.service.vectorize;
 
+import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +13,12 @@ import java.util.List;
 @Component
 @Slf4j
 public class VTracerVectorizer extends AbstractVectorizer implements Vectorizer {
-    private final String vtracerCmd = "vtracer"; // Assuming vtracer is in PATH
+
+    public VTracerVectorizer(OutputDirectoryManagerService outputDirectoryManagerService) {
+        super(outputDirectoryManagerService);
+    }
+
+    private final String vtracerCmd = "vtracer";
     @Override
     public String getName() {
         return "VTracer";

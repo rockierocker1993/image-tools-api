@@ -64,14 +64,4 @@ public class CommonUtil {
         return getBytes(getInputStream(multipartFile, runtimeException), runtimeException);
     }
 
-    public static <T> T getInstance(Class<T> clazz) {
-        try {
-            return clazz.getDeclaredConstructor().newInstance();
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(
-                    "Failed to create instance of " + clazz.getName(), e
-            );
-        }
-    }
-
 }

@@ -1,17 +1,18 @@
 package id.rockierocker.imagetools.service.vectorize;
 
+import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.List;
 
+@Component
 @Slf4j
 public class InkscapeVectorizer extends AbstractVectorizer implements Vectorizer {
 
-    private final String inkscapeCmd;
-
-    public InkscapeVectorizer(String inkscapeCmd) {
-        this.inkscapeCmd = inkscapeCmd;
+    public InkscapeVectorizer(OutputDirectoryManagerService outputDirectoryManagerService) {
+        super(outputDirectoryManagerService);
     }
 
     @Override
@@ -34,7 +35,7 @@ public class InkscapeVectorizer extends AbstractVectorizer implements Vectorizer
         log.info("Starting Inkscape vectorization...");
         Path output = getOutputPath();
         List<String> command = List.of(
-                inkscapeCmd,
+                "inkscape",
                 inputImage.toAbsolutePath().toString(),
                 "--batch-process",
                 //"--actions=TraceBitmap;ObjectToPath;ExportPlainSVG",
