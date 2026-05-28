@@ -16,13 +16,13 @@ import id.rockierocker.imagetools.service.OutputDirectoryManagerService;
 import id.rockierocker.imagetools.service.PreprocessService;
 import id.rockierocker.imagetools.service.UserService;
 import id.rockierocker.imagetools.util.CommonUtil;
-import id.rockierocker.imagetools.util.ImageUtil;
 import id.rockierocker.imagetools.service.vectorize.VTracerVectorizer;
 import id.rockierocker.imagetools.service.vectorize.Vectorizer;
 import id.rockierocker.imagetools.service.vectorize.constant.VTracerColorMode;
 import id.rockierocker.imagetools.service.vectorize.constant.VTracerCurveFittingMode;
 import id.rockierocker.imagetools.service.vectorize.constant.VTracerHierarchical;
 import id.rockierocker.imagetools.util.ResponseUtil;
+import id.rockierocker.imagetools.util.SvgPointExtractor;
 import id.rockierocker.imagetools.util.ValidatorUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +31,6 @@ import org.apache.batik.parser.AWTPathProducer;
 import org.apache.batik.parser.PathParser;
 import org.apache.batik.util.XMLResourceDescriptor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,14 +41,19 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.svg.SVGDocument;
 
-import java.awt.Color;
 import java.awt.Shape;
+import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
-import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.*;
+
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -84,6 +87,10 @@ public class SvgVectorService {
                     .preprocessConfigCode(preprocessCode)
                     .vectorConfigCode(configCode)
                     .build());
+
+            SvgVectorCreateRegionDto svgVectorCreateRegionDto = createRegion(svgBytes);
+            svgBytes = svgVectorCreateRegionDto.getSvgRegion();
+
             String requestId = UUID.randomUUID().toString();
             String imageName = "svg-" + requestId + ".svg";
             String imageKey = s3LocalMinio.uploadFile(svgBytes, imageName, "image/svg", minioVectorSvgPath);
@@ -112,7 +119,7 @@ public class SvgVectorService {
                     SvgVectorResponseDto.builder()
                             .imageId(requestId)
                             .svg(new String(svgBytes))
-                            .regions(analyze(svgBytes))
+                            .regions(svgVectorCreateRegionDto.getRegions())
                             .build())
             );
         } catch (BadRequestException | InternalServerErrorException e) {
@@ -206,15 +213,15 @@ public class SvgVectorService {
         }
     }
 
-    public List<SvgVectorColorRegion> analyze(byte[] svgByte) throws Exception {
-        File inputFile = outputDirectoryManagerService.createTempFile("anlyze-region"+UUID.randomUUID().toString(), ".svg",
+    public SvgVectorCreateRegionDto createRegion(byte[] svgByte) throws Exception {
+        File inputFile = outputDirectoryManagerService.createTempFile("region" + UUID.randomUUID().toString(), ".svg",
                 svgByte, new InternalServerErrorException(ResponseCode.FAILED_CREATE_TEMP_FILE));
         String parser = XMLResourceDescriptor.getXMLParserClassName();
         SAXSVGDocumentFactory factory = new SAXSVGDocumentFactory(parser);
         SVGDocument document = factory.createSVGDocument(inputFile.toURI().toString());
 
         NodeList all = document.getElementsByTagName("*");
-        Map<String, List<Element>> groupedByColor = new HashMap<>();
+        Map<String, List<Element>> groupedByColor = new LinkedHashMap<>();
 
         for (int i = 0; i < all.getLength(); i++) {
             Node node = all.item(i);
@@ -222,30 +229,37 @@ public class SvgVectorService {
                 continue;
             }
             String fill = element.getAttribute("fill");
-            if (fill == null || fill.isBlank()) {
+            if (!StringUtils.hasText(fill)) {
                 continue;
             }
-            String normalized = normalizeColor(fill);
+            String normalized = fill;//normalizeColor(fill);
             if (normalized == null) {
                 continue;
             }
-            groupedByColor
-                    .computeIfAbsent(normalized, k -> new ArrayList<>())
-                    .add(element);
+            groupedByColor.computeIfAbsent(normalized, k -> new ArrayList<>()).add(element);
         }
 
         List<SvgVectorColorRegion> result = new ArrayList<>();
         int idx = 0;
+        boolean documentMutated = false;
 
         for (Map.Entry<String, List<Element>> entry : groupedByColor.entrySet()) {
+            String regionId = "region-" + idx++;
             List<String> ids = new ArrayList<>();
             Rectangle2D unionBounds = null;
 
             for (Element el : entry.getValue()) {
                 String id = el.getAttribute("id");
                 if (id == null || id.isBlank()) {
-                    id = UUID.randomUUID().toString();
+                    id = "el-" + UUID.randomUUID();
                     el.setAttribute("id", id);
+                    documentMutated = true;
+                }
+                // Tag element dengan region-nya untuk memudahkan lookup di sisi client.
+                String currentRegionAttr = el.getAttribute("data-region");
+                if (!regionId.equals(currentRegionAttr)) {
+                    el.setAttribute("data-region", regionId);
+                    documentMutated = true;
                 }
                 ids.add(id);
 
@@ -263,7 +277,7 @@ public class SvgVectorService {
             }
 
             SvgVectorColorRegion region = SvgVectorColorRegion.builder()
-                    .id("region-" + idx++)
+                    .id(regionId)
                     .color(entry.getKey())
                     .elementIds(ids)
                     .bounds(unionBounds)
@@ -272,25 +286,44 @@ public class SvgVectorService {
         }
 
         buildNeighbors(result);
-        return result;
+
+        // Serialize kembali document (yang sudah ter-mutasi dengan id & data-region) ke bytes.
+        byte[] updatedSvg = documentMutated ? serializeSvg(document) : svgByte;
+        outputDirectoryManagerService.createTempFile("updated", ".svg" ,
+                updatedSvg, new InternalServerErrorException(ResponseCode.FAILED_CREATE_TEMP_FILE));
+        return SvgVectorCreateRegionDto
+                .builder()
+                .svgRegion(updatedSvg)
+                .regions(result)
+                .build();
     }
 
-    private String normalizeColor(String color) {
-        try {
-            // Hanya support #RRGGBB / #RGB. Skip nilai "none", "url(#...)", warna nama, dll.
-            String trimmed = color.trim();
-            if (!trimmed.startsWith("#")) {
-                return null;
-            }
-            Color c = Color.decode(trimmed);
-            int r = (c.getRed()   / 16) * 16;
-            int g = (c.getGreen() / 16) * 16;
-            int b = (c.getBlue()  / 16) * 16;
-            return String.format("#%02X%02X%02X", r, g, b);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+    private byte[] serializeSvg(SVGDocument document) throws Exception {
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer transformer = tf.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        transformer.transform(new DOMSource(document), new StreamResult(baos));
+        return baos.toByteArray();
     }
+
+//    private String normalizeColor(String color) {
+//        try {
+//            // Hanya support #RRGGBB / #RGB. Skip nilai "none", "url(#...)", warna nama, dll.
+//            String trimmed = color.trim();
+//            if (!trimmed.startsWith("#")) {
+//                return null;
+//            }
+//            Color c = Color.decode(trimmed);
+//            int r = (c.getRed() / 16) * 16;
+//            int g = (c.getGreen() / 16) * 16;
+//            int b = (c.getBlue() / 16) * 16;
+//            return String.format("#%02X%02X%02X", r, g, b);
+//        } catch (NumberFormatException e) {
+//            return null;
+//        }
+//    }
 
     private Rectangle2D extractBounds(Element element) {
         try {
@@ -298,6 +331,8 @@ public class SvgVectorService {
             if (d == null || d.isBlank()) {
                 return null;
             }
+            List<Point2D> points = SvgPointExtractor.extractPoints(d);
+            d = catmullRom2Bezier(points);
             AWTPathProducer producer = new AWTPathProducer();
             PathParser parser = new PathParser();
             parser.setPathHandler(producer);
@@ -334,5 +369,57 @@ public class SvgVectorService {
             a.setNeighbors(neighbors);
         }
     }
-    
+
+    public String catmullRom2Bezier(List<Point2D> points) {
+        log.info("Converting Catmull-Rom to Bezier for {} points", points.size());
+        StringBuilder d = new StringBuilder();
+
+        if (points.size() < 2) {
+            log.info("Not enough points to convert Catmull-Rom to Bezier. Returning empty path.");
+            return "";
+        }
+        log.info("Starting point: ({}, {})", points.get(0).getX(), points.get(0).getY());
+
+        d.append("M ")
+                .append(points.get(0).getX())
+                .append(" ")
+                .append(points.get(0).getY());
+
+        for (int i = 0; i < points.size() - 1; i++) {
+
+            Point2D p0 = i > 0
+                    ? points.get(i - 1)
+                    : points.get(i);
+
+            Point2D p1 = points.get(i);
+
+            Point2D p2 = points.get(i + 1);
+
+            Point2D p3 = (i != points.size() - 2)
+                    ? points.get(i + 2)
+                    : p2;
+
+            double cp1x =
+                    p1.getX() + (p2.getX() - p0.getX()) / 6;
+
+            double cp1y =
+                    p1.getY() + (p2.getY() - p0.getY()) / 6;
+
+            double cp2x =
+                    p2.getX() - (p3.getX() - p1.getX()) / 6;
+
+            double cp2y =
+                    p2.getY() - (p3.getY() - p1.getY()) / 6;
+
+            d.append(" C ")
+                    .append(cp1x).append(" ")
+                    .append(cp1y).append(", ")
+                    .append(cp2x).append(" ")
+                    .append(cp2y).append(", ")
+                    .append(p2.getX()).append(" ")
+                    .append(p2.getY());
+        }
+
+        return d.toString();
+    }
 }

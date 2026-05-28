@@ -9,6 +9,7 @@ import org.opencv.core.Mat;
 import org.opencv.imgproc.Imgproc;
 import org.springframework.stereotype.Component;
 
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 
@@ -62,6 +63,10 @@ public class CartoonizeComand implements PreprocessCommand {
 
     @Override
     public BufferedImage execute(BufferedImage image, Config config) {
+        Graphics2D g = image.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.drawImage(image, 0, 0, image.getWidth(), image.getHeight(), null);
+        g.dispose();
         int blurSize       = config.getCartoonizeBlurSize() != null ? config.getCartoonizeBlurSize() : 7;
         int edgeBlockSize  = config.getCartoonizeEdgeBlockSize() != null ? config.getCartoonizeEdgeBlockSize() : 9;
         int edgeC          = config.getCartoonizeEdgeC() != null ? config.getCartoonizeEdgeC() : 2;
